@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Wendy & Daniel 记账本</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'notion-black': 'rgba(0,0,0,0.95)',
+            'warm-white': '#f6f5f4',
+            'warm-dark': '#31302e',
+            'warm-gray-500': '#615d59',
+            'warm-gray-300': '#a39e98',
+            'notion-blue': '#0075de',
+            'active-blue': '#005bab',
+            'badge-blue-bg': '#f2f9ff',
+            'badge-blue-text': '#097fe8',
+            'focus-blue': '#097fe8',
+            'green': '#1aae39',
+            'orange': '#dd5b00',
+          },
+          fontFamily: {
+            notion: ['Inter', '-apple-system', 'system-ui', 'Segoe UI', 'Helvetica', 'Arial', 'sans-serif'],
+          },
+          boxShadow: {
+            'card': 'rgba(0,0,0,0.04) 0px 4px 18px, rgba(0,0,0,0.027) 0px 2.025px 7.84688px, rgba(0,0,0,0.02) 0px 0.8px 2.925px, rgba(0,0,0,0.01) 0px 0.175px 1.04062px',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Inter', -apple-system, system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
+    .whisper-border { border: 1px solid rgba(0,0,0,0.1); }
+    .notion-card { background: white; border: 1px solid rgba(0,0,0,0.1); border-radius: 12px; box-shadow: rgba(0,0,0,0.04) 0px 4px 18px, rgba(0,0,0,0.027) 0px 2.025px 7.84688px, rgba(0,0,0,0.02) 0px 0.8px 2.925px, rgba(0,0,0,0.01) 0px 0.175px 1.04062px; }
+    .notion-btn-primary { background: #0075de; color: white; padding: 8px 16px; border-radius: 4px; font-weight: 600; font-size: 15px; line-height: 1.33; transition: all 0.2s; }
+    .notion-btn-primary:hover { background: #005bab; }
+    .notion-btn-primary:active { transform: scale(0.95); }
+    .notion-btn-secondary { background: rgba(0,0,0,0.05); color: rgba(0,0,0,0.95); padding: 8px 16px; border-radius: 4px; font-weight: 600; font-size: 15px; line-height: 1.33; transition: all 0.2s; }
+    .notion-btn-secondary:hover { background: rgba(0,0,0,0.1); }
+    .notion-input { width: 100%; background: white; color: rgba(0,0,0,0.9); padding: 6px 12px; border-radius: 4px; border: 1px solid #ddd; font-size: 15px; }
+    .notion-input:focus { outline: none; border-color: #097fe8; box-shadow: 0 0 0 1px #097fe8; }
+    .pill-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 9999px; background: #f2f9ff; color: #097fe8; font-size: 12px; font-weight: 600; letter-spacing: 0.125px; }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 50; display: flex; align-items: flex-end; justify-content: center; }
+    @media (min-width: 640px) { .modal-overlay { align-items: center; } }
+    .modal-content { background: white; width: 100%; max-width: 400px; border-radius: 12px 12px 0 0; max-height: 90vh; overflow-y: auto; box-shadow: rgba(0,0,0,0.01) 0px 1px 3px, rgba(0,0,0,0.02) 0px 3px 7px, rgba(0,0,0,0.02) 0px 7px 15px, rgba(0,0,0,0.04) 0px 14px 28px, rgba(0,0,0,0.05) 0px 23px 52px; }
+    @media (min-width: 640px) { .modal-content { border-radius: 12px; } }
+    .category-chip { padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; transition: all 0.15s; }
+    .category-chip.active { background: #0075de; color: white; }
+    .category-chip.inactive { background: #f6f5f4; color: #615d59; }
+    .category-chip.inactive:hover { background: rgba(0,0,0,0.05); }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 3px; }
+  </style>
+</head>
+<body class="bg-white text-notion-black pb-28">
+  <div id="app"></div>
+
+<script>
+const API_BASE = '';
+const CATEGORIES = ['买菜', '餐饮', '购物', '交通', '娱乐', '日用', '学习', '医疗', '订阅', '其他'];
+const EMOJI = { '买菜': '🥬', '餐饮': '🍽️', '购物': '🛒', '交通': '🚕', '娱乐': '🎬', '日用': '🧻', '学习': '📚', '医疗': '💊', '订阅': '🔄', '其他': '📝' };
+const COLORS = ['#0075de', '#2a9d99', '#1aae39', '#dd5b00', '#ff64c8', '#391c57', '#523410', '#a39e98'];
+
+let chartInstance = null;
+let recognition = null;
+
+const state = {
+  view: 'dashboard',
+  startDate: new Date().toISOString().slice(0, 8) + '01',
+  endDate: new Date().toISOString().split('T')[0],
+  summary: null,
+  expenses: [],
+  subscriptions: [],
+  modal: null,
+  editingItem: null,
+  voiceTranscript: '',
+  isListening: false,
+};
+
+async function api(url, opts = {}) {
+  const res = await fetch(`${API_BASE}${url}`, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', ...opts.headers },
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+function formatDate(d) {
+  const date = new Date(d);
+  return `${date.getMonth() + 1}月${date.getDate()}日`;
+}
+
+function formatMoney(n) {
+  return `¥${Number(n || 0).toFixed(0)}`;
+}
+
+async function fetchDashboard() {
+  const [summary, expenses] = await Promise.all([
+    api(`/api/summary?start_date=${state.startDate}&end_date=${state.endDate}`),
+    api(`/api/expenses?start_date=${state.startDate}&end_date=${state.endDate}`),
+  ]);
+  state.summary = summary;
+  state.expenses = expenses;
+  render();
+}
+
+async function fetchSubscriptions() {
+  state.subscriptions = await api('/api/subscriptions');
+  render();
+}
+
+function setRange(start, end) {
+  if (start) state.startDate = start;
+  if (end) state.endDate = end;
+  if (state.view === 'dashboard') fetchDashboard();
+  else render();
+}
+
+function applyPreset(key) {
+  const today = new Date();
+  let s, e;
+  if (key === 'month') { s = new Date(today.getFullYear(), today.getMonth(), 1); e = today; }
+  else if (key === 'week') { const day = today.getDay() || 7; s = new Date(today); s.setDate(today.getDate() - day + 1); e = today; }
+  else if (key === 'last_month') { s = new Date(today.getFullYear(), today.getMonth() - 1, 1); e = new Date(today.getFullYear(), today.getMonth(), 0); }
+  setRange(s.toISOString().split('T')[0], e.toISOString().split('T')[0]);
+}
+
+function openModal(type, item = null) {
+  state.modal = type;
+  state.editingItem = item;
+  if (type === 'expense') {
+    setTimeout(() => initExpenseForm(item), 0);
+  }
+  render();
+}
+
+function closeModal() {
+  state.modal = null;
+  state.editingItem = null;
+  state.voiceTranscript = '';
+  render();
+}
+
+function renderHeader() {
+  return `
+    <header class="px-5 pt-8 pb-4 bg-white">
+      <h1 class="text-[28px] font-bold tracking-tight leading-tight text-notion-black mb-1">Wendy & Daniel</h1>
+      <p class="text-sm text-warm-gray-500 font-medium mb-4">共同记账本</p>
+      <div class="flex items-center gap-2 mb-3">
+        ${['month:本月', 'week:本周', 'last_month:上月'].map(p => {
+          const [k, l] = p.split(':');
+          return `<button onclick="applyPreset('${k}')" class="px-3 py-1.5 rounded bg-black/5 text-notion-black text-xs font-semibold hover:bg-black/10 active:scale-95 transition">${l}</button>`;
+        }).join('')}
+      </div>
+      <div class="flex items-center gap-2">
+        <input type="date" value="${state.startDate}" onchange="setRange(this.value, null)" class="notion-input text-sm py-1.5 flex-1">
+        <span class="text-warm-gray-300 text-sm">至</span>
+        <input type="date" value="${state.endDate}" onchange="setRange(null, this.value)" class="notion-input text-sm py-1.5 flex-1">
+      </div>
+    </header>
+  `;
+}
+
+function renderSummary() {
+  const wendy = state.summary?.wendy_total || 0;
+  const daniel = state.summary?.daniel_total || 0;
+  const total = wendy + daniel;
+  return `
+    <div class="px-5">
+      <div class="notion-card p-5">
+        <div class="flex items-baseline justify-between mb-4">
+          <span class="text-sm font-medium text-warm-gray-500">本月总支出</span>
+          <span class="text-[40px] font-bold leading-none tracking-tight text-notion-black">${formatMoney(total)}</span>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div class="rounded bg-warm-white p-4">
+            <div class="text-xs font-medium text-warm-gray-500 mb-1">Wendy 支出</div>
+            <div class="text-[22px] font-bold tracking-tight text-notion-black">${formatMoney(wendy)}</div>
+            ${total > 0 ? `<div class="text-xs text-warm-gray-300 mt-1">${((wendy / total) * 100).toFixed(0)}%</div>` : ''}
+          </div>
+          <div class="rounded bg-warm-white p-4">
+            <div class="text-xs font-medium text-warm-gray-500 mb-1">Daniel 支出</div>
+            <div class="text-[22px] font-bold tracking-tight text-notion-black">${formatMoney(daniel)}</div>
+            ${total > 0 ? `<div class="text-xs text-warm-gray-300 mt-1">${((daniel / total) * 100).toFixed(0)}%</div>` : ''}
+          </div>
+        </div>
+        ${state.summary?.income_total > 0 ? `
+          <div class="mt-4 pt-4 border-t border-black/5">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-medium text-warm-gray-500">期间收入</span>
+              <span class="text-lg font-bold text-green">+${formatMoney(state.summary.income_total)}</span>
+            </div>
+          </div>
+        ` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function renderChart() {
+  const cats = state.summary?.categories || [];
+  if (cats.length === 0) {
+    return `
+      <div class="px-5 mt-6">
+        <h3 class="text-lg font-bold tracking-tight mb-3">分类统计</h3>
+        <div class="notion-card p-8 text-center text-warm-gray-300 text-sm">该时段暂无支出数据</div>
+      </div>
+    `;
+  }
+  return `
+    <div class="px-5 mt-6">
+      <h3 class="text-lg font-bold tracking-tight mb-3">分类统计</h3>
+      <div class="notion-card p-4">
+        <div class="h-48 relative">
+          <canvas id="chartCanvas"></canvas>
+        </div>
+        <div class="mt-4 space-y-2">
+          ${cats.map((item, idx) => {
+            const total = cats.reduce((s, c) => s + c.total, 0);
+            const pct = ((item.total / total) * 100).toFixed(0);
+            return `
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="inline-block w-2.5 h-2.5 rounded-full" style="background:${COLORS[idx % COLORS.length]}"></span>
+                  <span class="text-sm text-notion-black font-medium">${item.category}</span>
+                </div>
+                <div class="text-sm text-warm-gray-500">${formatMoney(item.total)} <span class="text-warm-gray-300">(${pct}%)</span></div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function initChart() {
+  const canvas = document.getElementById('chartCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const cats = state.summary?.categories || [];
+  if (cats.length === 0) return;
+  if (chartInstance) { chartInstance.destroy(); }
+  chartInstance = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: cats.map(c => c.category),
+      datasets: [{
+        data: cats.map(c => c.total),
+        backgroundColor: cats.map((_, i) => COLORS[i % COLORS.length]),
+        borderWidth: 0,
+        hoverOffset: 4,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '65%',
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => ` ${formatMoney(c.raw)}` } } }
+    }
+  });
+}
+
+function renderVoiceRecorder() {
+  return `
+    <div class="px-5 mt-6">
+      <div class="bg-white rounded-xl p-4 whisper-border">
+        <div class="text-sm font-medium text-warm-gray-500 mb-2">语音速记</div>
+        <div class="text-xs text-warm-gray-300 mb-3">试着说："Wendy 买菜花了三十五块" 或 "Daniel 打车二十八"</div>
+        <div class="flex flex-col items-center">
+          <div id="voiceBtn" onclick="toggleVoice()" class="w-16 h-16 rounded-full flex items-center justify-center text-2xl transition-all duration-200 cursor-pointer select-none ${state.isListening ? 'bg-orange text-white scale-110 shadow-lg' : 'bg-notion-blue text-white hover:bg-active-blue active:scale-95'}">
+            ${state.isListening ? '⏹' : '🎤'}
+          </div>
+          <div class="text-center mt-2 text-xs text-warm-gray-500">${state.isListening ? '正在聆听… 点击结束' : '点击开始说话'}</div>
+        </div>
+        ${state.voiceTranscript ? `<div class="mt-3 p-3 rounded bg-warm-white text-sm text-notion-black">${state.voiceTranscript}</div>` : ''}
+        ${state.voiceTranscript && !state.isListening ? `<button onclick="submitVoice()" class="w-full mt-3 notion-btn-primary">确认并解析</button>` : ''}
+        <div id="voiceError" class="mt-2 text-xs text-orange text-center hidden"></div>
+      </div>
+    </div>
+  `;
+}
+
+function toggleVoice() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    const el = document.getElementById('voiceError');
+    el.textContent = '您的浏览器不支持语音识别，请使用 Safari (iOS) 或 Chrome';
+    el.classList.remove('hidden');
+    return;
+  }
+  if (state.isListening) {
+    if (recognition) recognition.stop();
+    return;
+  }
+  recognition = new SpeechRecognition();
+  recognition.lang = 'zh-CN';
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.onstart = () => { state.isListening = true; state.voiceTranscript = ''; render(); };
+  recognition.onresult = (e) => {
+    let final = '', interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) final += e.results[i][0].transcript;
+      else interim += e.results[i][0].transcript;
+    }
+    state.voiceTranscript = final || interim;
+    renderVoiceOnly();
+  };
+  recognition.onerror = (e) => { state.isListening = false; render(); };
+  recognition.onend = () => { state.isListening = false; render(); };
+  try { recognition.start(); } catch (err) {}
+}
+
+function renderVoiceOnly() {
+  const app = document.getElementById('app');
+  const voiceHtml = renderVoiceRecorder();
+  // simple re-render whole app to keep state consistent
+  render();
+}
+
+async function submitVoice() {
+  if (!state.voiceTranscript.trim()) return;
+  try {
+    const result = await api('/api/parse-voice', { method: 'POST', body: JSON.stringify({ text: state.voiceTranscript }) });
+    if (!result.payer) result.payer = 'Wendy';
+    await api('/api/expenses', {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'expense', amount: result.amount || 0, category: result.category || '其他',
+        payer: result.payer, is_personal: result.is_personal || false,
+        note: result.note || state.voiceTranscript, date: new Date().toISOString().split('T')[0]
+      })
+    });
+    state.voiceTranscript = '';
+    fetchDashboard();
+  } catch (e) {
+    alert('语音解析失败，请手动记账');
+  }
+}
+
+function renderExpenseList() {
+  const grouped = {};
+  state.expenses.forEach(item => { if (!grouped[item.date]) grouped[item.date] = []; grouped[item.date].push(item); });
+  const dates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+  return `
+    <div class="px-5 mt-6">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-lg font-bold tracking-tight">收支明细</h3>
+        <button onclick="fetchDashboard()" class="text-xs text-notion-blue font-medium hover:underline">刷新</button>
+      </div>
+      ${dates.length === 0 ? `<div class="notion-card p-8 text-center text-warm-gray-300 text-sm">暂无记录</div>` : ''}
+      <div class="space-y-4">
+        ${dates.map(date => `
+          <div>
+            <div class="text-xs font-semibold text-warm-gray-300 mb-2 tracking-wide">${formatDate(date)}</div>
+            <div class="notion-card overflow-hidden">
+              ${grouped[date].map((item, idx) => {
+                const isIncome = item.type === 'income';
+                const emoji = isIncome ? '💰' : (EMOJI[item.category] || '📝');
+                const sign = isIncome ? '+' : '-';
+                return `
+                  <div class="flex items-center justify-between px-4 py-3 ${idx !== grouped[date].length - 1 ? 'border-b border-black/5' : ''}">
+                    <div class="flex items-center gap-3">
+                      <div class="w-8 h-8 rounded-lg bg-warm-white flex items-center justify-center text-base">${emoji}</div>
+                      <div>
+                        <div class="text-sm font-semibold text-notion-black">${item.category}${item.is_personal ? '<span class="ml-1.5 pill-badge py-0.5 px-1.5 text-[10px]">个人</span>' : ''}</div>
+                        <div class="text-xs text-warm-gray-500 mt-0.5">${item.note || '无备注'} · ${item.payer}</div>
+                      </div>
+                    </div>
+                    <div class="text-right">
+                      <div class="text-sm font-bold ${isIncome ? 'text-green' : 'text-notion-black'}">${sign}${formatMoney(item.amount)}</div>
+                      <div class="flex items-center justify-end gap-2 mt-1">
+                        <button onclick='openModal("expense", ${JSON.stringify(item).replace(/'/g, "&#39;")})' class="text-[11px] text-warm-gray-300 hover:text-warm-gray-500">编辑</button>
+                        <button onclick="deleteExpense(${item.id})" class="text-[11px] text-warm-gray-300 hover:text-orange">删除</button>
+                      </div>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+async function deleteExpense(id) {
+  if (!confirm('确定删除这条记录吗？')) return;
+  await api(`/api/expenses/${id}`, { method: 'DELETE' });
+  fetchDashboard();
+}
+
+function renderBottomBar() {
+  return `
+    <div class="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-black/5 px-5 py-3 z-40">
+      <div class="max-w-md mx-auto flex items-center gap-3">
+        <button onclick='openModal("expense")' class="flex-1 py-3 rounded bg-badge-blue-bg text-badge-blue-text font-bold text-[15px] active:scale-95 transition">Wendy 记账</button>
+        <button onclick='openModal("expense")' class="flex-1 py-3 rounded bg-warm-white text-notion-black font-bold text-[15px] active:scale-95 transition whisper-border">Daniel 记账</button>
+      </div>
+      <div class="max-w-md mx-auto mt-2 flex justify-center gap-4">
+        <button onclick="switchView('dashboard')" class="text-xs ${state.view === 'dashboard' ? 'text-notion-blue font-semibold' : 'text-warm-gray-500'} hover:text-notion-blue font-medium">首页</button>
+        <button onclick="switchView('subscriptions')" class="text-xs ${state.view === 'subscriptions' ? 'text-notion-blue font-semibold' : 'text-warm-gray-500'} hover:text-notion-blue font-medium">订阅管理</button>
+      </div>
+    </div>
+  `;
+}
+
+function switchView(view) {
+  state.view = view;
+  if (view === 'dashboard') fetchDashboard();
+  else if (view === 'subscriptions') fetchSubscriptions();
+  else render();
+}
+
+function renderDashboard() {
+  return renderHeader() + renderSummary() + renderChart() + renderVoiceRecorder() + renderExpenseList();
+}
+
+function renderSubscriptions() {
+  const subs = state.subscriptions;
+  return `
+    <header class="px-5 pt-8 pb-4 bg-white">
+      <div class="flex items-center justify-between">
+        <h1 class="text-[26px] font-bold tracking-tight text-notion-black">订阅管理</h1>
+        <button onclick="switchView('dashboard')" class="text-sm text-warm-gray-500 hover:text-notion-blue">返回</button>
+      </div>
+      <p class="text-sm text-warm-gray-500 mt-1">管理每月自动生成的固定支出</p>
+    </header>
+    <div class="px-5 pb-6">
+      ${subs.length === 0 ? `<div class="text-center text-sm text-warm-gray-300 py-8">还没有订阅，点击下方按钮添加</div>` : ''}
+      <div class="space-y-3">
+        ${subs.map(sub => `
+          <div class="notion-card p-3 flex items-center justify-between">
+            <div>
+              <div class="text-sm font-semibold text-notion-black flex items-center gap-2">
+                ${sub.name}
+                ${!sub.is_active ? '<span class="px-1.5 py-0.5 rounded-full bg-warm-white text-warm-gray-300 text-[10px]">已暂停</span>' : ''}
+              </div>
+              <div class="text-xs text-warm-gray-500 mt-0.5">${formatMoney(sub.amount)} / ${sub.category} / 每月${sub.day_of_month}日 / ${sub.payer}</div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="toggleSub(${sub.id})" class="text-xs px-2 py-1 rounded font-medium ${sub.is_active ? 'bg-orange/10 text-orange' : 'bg-green/10 text-green'}">${sub.is_active ? '暂停' : '恢复'}</button>
+              <button onclick='openSubEdit(${JSON.stringify(sub).replace(/'/g, "&#39;")})' class="text-xs text-warm-gray-300 hover:text-warm-gray-500 px-1">编辑</button>
+              <button onclick="deleteSub(${sub.id})" class="text-xs text-warm-gray-300 hover:text-orange px-1">删除</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+      <button onclick="openSubEdit()" class="w-full mt-4 notion-btn-secondary">+ 添加新订阅</button>
+    </div>
+  `;
+}
+
+async function toggleSub(id) {
+  const sub = state.subscriptions.find(s => s.id === id);
+  if (!sub) return;
+  await api(`/api/subscriptions/${id}`, { method: 'PUT', body: JSON.stringify({ ...sub, is_active: !sub.is_active }) });
+  fetchSubscriptions();
+}
+
+async function deleteSub(id) {
+  if (!confirm('确定删除这个订阅吗？已生成的历史记录不会受影响。')) return;
+  await api(`/api/subscriptions/${id}`, { method: 'DELETE' });
+  fetchSubscriptions();
+}
+
+function openSubEdit(sub = null) {
+  state.modal = 'subscription';
+  state.editingItem = sub;
+  render();
+  setTimeout(() => initSubForm(sub), 0);
+}
+
+function renderModal() {
+  if (!state.modal) return '';
+  if (state.modal === 'expense') return renderExpenseModal();
+  if (state.modal === 'subscription') return renderSubscriptionModal();
+  return '';
+}
+
+function renderExpenseModal() {
+  return `
+    <div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+      <div class="modal-content">
+        <div class="px-5 py-4 border-b border-black/5 flex items-center justify-between">
+          <h2 class="text-lg font-bold tracking-tight">${state.editingItem ? '编辑记录' : '记一笔'}</h2>
+          <button onclick="closeModal()" class="text-warm-gray-300 hover:text-warm-gray-500 text-2xl leading-none">×</button>
+        </div>
+        <form id="expenseForm" onsubmit="submitExpense(event)" class="px-5 py-4 space-y-4">
+          <div class="flex gap-2">
+            <button type="button" id="btn-expense" onclick="setExpenseType('expense')" class="flex-1 py-2 rounded text-sm font-semibold transition bg-notion-blue text-white">支出</button>
+            <button type="button" id="btn-income" onclick="setExpenseType('income')" class="flex-1 py-2 rounded text-sm font-semibold transition bg-warm-white text-warm-gray-500">收入</button>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-warm-gray-500 mb-1">金额</label>
+            <input type="number" step="0.01" required id="f-amount" class="notion-input" placeholder="0.00">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-warm-gray-500 mb-1">分类</label>
+            <div class="flex flex-wrap gap-2" id="categoryContainer">
+              ${CATEGORIES.map(cat => `<button type="button" onclick="selectCategory('${cat}')" class="category-chip inactive" data-cat="${cat}">${cat}</button>`).join('')}
+            </div>
+            <input type="hidden" id="f-category" value="买菜">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-warm-gray-500 mb-1">付款人 / 收款人</label>
+            <div class="flex gap-3">
+              ${['Wendy', 'Daniel'].map(p => `
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="payer" value="${p}" id="f-payer-${p}" class="accent-notion-blue w-4 h-4">
+                  <span class="text-sm text-notion-black">${p}</span>
+                </label>
+              `).join('')}
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <input id="f-personal" type="checkbox" class="accent-notion-blue w-4 h-4">
+            <label for="f-personal" class="text-sm text-notion-black cursor-pointer">标记为个人消费</label>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-warm-gray-500 mb-1">日期</label>
+            <input type="date" required id="f-date" class="notion-input">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-warm-gray-500 mb-1">备注</label>
+            <input type="text" id="f-note" class="notion-input" placeholder="例如：永辉超市、朋友聚餐…">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-warm-gray-500 mb-1">上传凭证</label>
+            <input type="file" accept="image/*" id="f-file" onchange="handleFileUpload(this)" class="text-sm">
+            <div id="f-image-preview" class="mt-2 hidden"></div>
+            <input type="hidden" id="f-receipt" value="">
+          </div>
+          <div class="pt-2">
+            <button type="submit" class="w-full notion-btn-primary">${state.editingItem ? '保存修改' : '确认记账'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
+function renderSubscriptionModal() {
+  return `
+    <div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+      <div class="modal-content">
+        <div class="px-5 py-4 border-b border-black/5 flex items-center justify-between">
+          <h2 class="text-lg font-bold tracking-tight">${state.editingItem ? '编辑订阅' : '添加订阅'}</h2>
+          <button onclick="closeModal()" class="text-warm-gray-300 hover:text-warm-gray-500 text-2xl leading-none">×</button>
+        </div>
+        <form id="subForm" onsubmit="submitSubscription(event)" class="px-5 py-4 space-y-3">
+          <div>
+            <label class="block text-xs font-medium text-warm-gray-500 mb-1">订阅名称</label>
+            <input type="text" required id="s-name" class="notion-input" placeholder="例如：Apple Music、Kimi 会员">
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-warm-gray-500 mb-1">金额</label>
+              <input type="number" step="0.01" required id="s-amount" class="notion-input">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-warm-gray-500 mb-1">每月扣款日</label>
+              <input type="number" min="1" max="31" required id="s-day" class="notion-input" value="1">
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-warm-gray-500 mb-1">分类</label>
+            <div class="flex flex-wrap gap-2" id="subCategoryContainer">
+              ${['订阅', '娱乐', '日用', '交通', '学习', '医疗', '其他'].map(cat => `<button type="button" onclick="selectSubCategory('${cat}')" class="category-chip inactive" data-cat="${cat}">${cat}</button>`).join('')}
+            </div>
+            <input type="hidden" id="s-category" value="订阅">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-warm-gray-500 mb-1">扣款人</label>
+            <div class="flex gap-3">
+              ${['Wendy', 'Daniel'].map(p => `
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="sub-payer" value="${p}" id="s-payer-${p}" class="accent-notion-blue w-4 h-4">
+                  <span class="text-sm text-notion-black">${p}</span>
+                </label>
+              `).join('')}
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <input id="s-personal" type="checkbox" class="accent-notion-blue w-4 h-4">
+            <label for="s-personal" class="text-sm text-notion-black cursor-pointer">个人订阅</label>
+          </div>
+          <div class="flex gap-2 pt-1">
+            <button type="button" onclick="closeModal()" class="flex-1 notion-btn-ghost bg-transparent text-notion-black font-semibold text-[15px] py-2 rounded hover:bg-black/5">取消</button>
+            <button type="submit" class="flex-1 notion-btn-primary">${state.editingItem ? '保存' : '添加'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
+function initExpenseForm(item) {
+  const type = item ? item.type : 'expense';
+  setExpenseType(type);
+  if (item) {
+    document.getElementById('f-amount').value = item.amount;
+    selectCategory(item.category);
+    document.getElementById(`f-payer-${item.payer}`).checked = true;
+    document.getElementById('f-personal').checked = !!item.is_personal;
+    document.getElementById('f-date').value = item.date;
+    document.getElementById('f-note').value = item.note || '';
+    document.getElementById('f-receipt').value = item.receipt_image || '';
+    if (item.receipt_image) {
+      const preview = document.getElementById('f-image-preview');
+      preview.innerHTML = `<img src="${item.receipt_image}" class="w-20 h-20 object-cover rounded-lg whisper-border">`;
+      preview.classList.remove('hidden');
+    }
+  } else {
+    document.getElementById('f-amount').value = '';
+    selectCategory('买菜');
+    document.getElementById('f-payer-Wendy').checked = true;
+    document.getElementById('f-personal').checked = false;
+    document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
+    document.getElementById('f-note').value = '';
+    document.getElementById('f-receipt').value = '';
+  }
+}
+
+function setExpenseType(type) {
+  document.getElementById('btn-expense').className = `flex-1 py-2 rounded text-sm font-semibold transition ${type === 'expense' ? 'bg-notion-blue text-white' : 'bg-warm-white text-warm-gray-500'}`;
+  document.getElementById('btn-income').className = `flex-1 py-2 rounded text-sm font-semibold transition ${type === 'income' ? 'bg-green text-white' : 'bg-warm-white text-warm-gray-500'}`;
+  document.getElementById('expenseForm').dataset.type = type;
+}
+
+function selectCategory(cat) {
+  document.getElementById('f-category').value = cat;
+  document.querySelectorAll('#categoryContainer .category-chip').forEach(el => {
+    el.className = el.dataset.cat === cat ? 'category-chip active' : 'category-chip inactive';
+  });
+}
+
+function selectSubCategory(cat) {
+  document.getElementById('s-category').value = cat;
+  document.querySelectorAll('#subCategoryContainer .category-chip').forEach(el => {
+    el.className = el.dataset.cat === cat ? 'category-chip active' : 'category-chip inactive';
+  });
+}
+
+async function handleFileUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await fetch('/api/upload', { method: 'POST', body: formData });
+  const data = await res.json();
+  document.getElementById('f-receipt').value = data.url;
+  const preview = document.getElementById('f-image-preview');
+  preview.innerHTML = `<img src="${data.url}" class="w-20 h-20 object-cover rounded-lg whisper-border">`;
+  preview.classList.remove('hidden');
+}
+
+async function submitExpense(e) {
+  e.preventDefault();
+  const payload = {
+    type: document.getElementById('expenseForm').dataset.type || 'expense',
+    amount: Number(document.getElementById('f-amount').value),
+    category: document.getElementById('f-category').value,
+    payer: document.querySelector('input[name="payer"]:checked')?.value || 'Wendy',
+    is_personal: document.getElementById('f-personal').checked,
+    date: document.getElementById('f-date').value,
+    note: document.getElementById('f-note').value,
+    receipt_image: document.getElementById('f-receipt').value,
+  };
+  if (state.editingItem) {
+    await api(`/api/expenses/${state.editingItem.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+  } else {
+    await api('/api/expenses', { method: 'POST', body: JSON.stringify(payload) });
+  }
+  closeModal();
+  fetchDashboard();
+}
+
+function initSubForm(sub) {
+  if (sub) {
+    document.getElementById('s-name').value = sub.name;
+    document.getElementById('s-amount').value = sub.amount;
+    document.getElementById('s-day').value = sub.day_of_month;
+    selectSubCategory(sub.category || '订阅');
+    document.getElementById(`s-payer-${sub.payer}`).checked = true;
+    document.getElementById('s-personal').checked = !!sub.is_personal;
+  } else {
+    document.getElementById('s-name').value = '';
+    document.getElementById('s-amount').value = '';
+    document.getElementById('s-day').value = 1;
+    selectSubCategory('订阅');
+    document.getElementById('s-payer-Wendy').checked = true;
+    document.getElementById('s-personal').checked = false;
+  }
+}
+
+async function submitSubscription(e) {
+  e.preventDefault();
+  const payload = {
+    name: document.getElementById('s-name').value,
+    amount: Number(document.getElementById('s-amount').value),
+    category: document.getElementById('s-category').value,
+    payer: document.querySelector('input[name="sub-payer"]:checked')?.value || 'Wendy',
+    is_personal: document.getElementById('s-personal').checked,
+    day_of_month: Number(document.getElementById('s-day').value),
+    is_active: true,
+  };
+  if (state.editingItem) {
+    await api(`/api/subscriptions/${state.editingItem.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+  } else {
+    await api('/api/subscriptions', { method: 'POST', body: JSON.stringify(payload) });
+  }
+  closeModal();
+  if (state.view === 'subscriptions') fetchSubscriptions();
+  else fetchDashboard();
+}
+
+function render() {
+  const app = document.getElementById('app');
+  let html = '';
+  if (state.view === 'dashboard') html = renderDashboard();
+  else if (state.view === 'subscriptions') html = renderSubscriptions();
+  app.innerHTML = html + renderBottomBar() + renderModal();
+  if (state.view === 'dashboard') setTimeout(initChart, 0);
+}
+
+// init
+document.addEventListener('DOMContentLoaded', () => {
+  fetchDashboard();
+});
+</script>
+</body>
+</html>

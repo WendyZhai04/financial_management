@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  body {
+    @apply bg-white text-notion-black;
+    font-feature-settings: "lnum" 1, "locl" 1;
+  }
+
+  /* Custom scrollbar for webkit */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(0,0,0,0.15);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(0,0,0,0.25);
+  }
+}
+
+@layer components {
+  .whisper-border {
+    @apply border border-solid border-black/10;
+  }
+  
+  .notion-card {
+    @apply bg-white whisper-border rounded-comfortable shadow-card;
+  }
+  
+  .notion-btn-primary {
+    @apply bg-notion-blue text-white px-4 py-2 rounded-micro font-semibold text-[15px] leading-[1.33] 
+           transition-all duration-200 
+           hover:bg-active-blue 
+           active:scale-[0.95]
+           focus:outline-none focus:ring-2 focus:ring-focus-blue focus:ring-offset-1;
+  }
+  
+  .notion-btn-secondary {
+    @apply bg-black/5 text-notion-black px-4 py-2 rounded-micro font-semibold text-[15px] leading-[1.33]
+           transition-all duration-200
+           hover:bg-black/10
+           active:scale-[0.95]
+           focus:outline-none focus:ring-2 focus:ring-focus-blue focus:ring-offset-1;
+  }
+  
+  .notion-btn-ghost {
+    @apply bg-transparent text-notion-black px-4 py-2 rounded-micro font-semibold text-[15px] leading-[1.33]
+           transition-all duration-200
+           hover:underline
+           active:scale-[0.95]
+           focus:outline-none focus:ring-2 focus:ring-focus-blue focus:ring-offset-1;
+  }
+  
+  .notion-input {
+    @apply w-full bg-white text-black/90 px-3 py-1.5 rounded-micro border border-[#dddddd]
+           placeholder:text-warm-gray-300
+           focus:outline-none focus:border-focus-blue focus:ring-1 focus:ring-focus-blue
+           transition-all duration-200;
+  }
+  
+  .notion-pill {
+    @apply inline-flex items-center px-2 py-1 rounded-pill bg-badge-blue-bg text-badge-blue-text
+           text-xs font-semibold tracking-badge;
+  }
+}
