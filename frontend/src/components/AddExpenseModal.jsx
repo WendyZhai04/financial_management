@@ -2,12 +2,12 @@ import React, { useState, useEffect } from 'react';
 
 const CATEGORIES = ['买菜', '餐饮', '购物', '交通', '娱乐', '日用', '学习', '医疗', '订阅', '其他'];
 
-export default function AddExpenseModal({ isOpen, onClose, onSave, initialData }) {
+export default function AddExpenseModal({ isOpen, onClose, onSave, initialData, defaultPayer }) {
   const [form, setForm] = useState({
     type: 'expense',
     amount: '',
     category: '买菜',
-    payer: 'Wendy',
+    payer: defaultPayer || 'Wendy',
     is_personal: false,
     note: '',
     date: new Date().toISOString().split('T')[0],
@@ -20,7 +20,7 @@ export default function AddExpenseModal({ isOpen, onClose, onSave, initialData }
         type: initialData.type || 'expense',
         amount: initialData.amount || '',
         category: initialData.category || '其他',
-        payer: initialData.payer || 'Wendy',
+        payer: initialData.payer || defaultPayer || 'Wendy',
         is_personal: !!initialData.is_personal,
         note: initialData.note || '',
         date: initialData.date || new Date().toISOString().split('T')[0],
@@ -31,7 +31,7 @@ export default function AddExpenseModal({ isOpen, onClose, onSave, initialData }
         type: 'expense',
         amount: '',
         category: '买菜',
-        payer: 'Wendy',
+        payer: defaultPayer || 'Wendy',
         is_personal: false,
         note: '',
         date: new Date().toISOString().split('T')[0],

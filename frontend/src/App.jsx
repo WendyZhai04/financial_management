@@ -150,6 +150,7 @@ function App() {
         onClose={() => { setShowAddModal(false); setEditingItem(null); }}
         onSave={handleSave}
         initialData={editingItem}
+        defaultPayer={defaultPayer}
       />
 
       <SubscriptionManager
