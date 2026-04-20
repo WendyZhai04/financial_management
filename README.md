@@ -43,7 +43,7 @@ npm run dev
 2. 前端：`npm run build` 生成 dist 文件夹，用 Nginx 托管静态文件
 3. 配置 Nginx 将 `/api` 和 `/uploads` 代理到后端服务
 
-### 方式二：Docker 部署（推荐让你男朋友做）
+### 方式二：Docker 部署
 可以写一个 `docker-compose.yml`，同时跑前端 Nginx 容器和后端 Python 容器。
 
 ## 注意事项
